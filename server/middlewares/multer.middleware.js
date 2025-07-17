@@ -1,14 +1,18 @@
 import multer from "multer";
+import path from "path";
+import fs from "fs";
 
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, "./public/temp");
-    },
-    filename: function (req, file, cb) {
-      cb(null, file.originalname);
-    },
-  }),
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
+  },
 });
 
-export { upload }; // ✅ Named export
+const multerMiddleware = multer({ storage });
+export default multerMiddleware;

@@ -7,13 +7,12 @@ import {
   sendOTP,
   verifyOTP,
   resendOTP,
-} from "../Controller/user.controller.js"
-import { upload } from "../middlewares/multer.middleware.js"
+} from "../Controller/user.controller.js";
 
 const router = express.Router()
 
 // Signup route with optional file upload
-router.route("/signup").post(upload.single("profilePic"), signup)
+// router.route("/signup").post(upload.single("profilePic"), signup)
 
 // Login route
 router.post("/login", login)

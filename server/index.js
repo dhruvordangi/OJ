@@ -4,6 +4,7 @@ dotenv.config({ path: './.env'});
 import express from "express";
 import mongoose from "mongoose";
 import userRoute from "./route/user.router.js";
+import problemRouter from "./route/problem.router.js"; // ✅ Ensure this file exists and is correctly implemented
 // import authRoute from "./route/auth.route.js"; // ✅ Ensure this file contains the googleLogin route
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -47,7 +48,7 @@ try {
 // Routes
 
 app.use("/user/", userRoute);
-
+app.use("/api/problems/", problemRouter);
 
 // app.all('*', (req, res, next) => {
 //     next(new AppError(`Can't find ${req.originalUrl} on the server`, 404));
