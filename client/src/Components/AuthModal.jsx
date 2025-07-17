@@ -144,25 +144,47 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
       try {
         setIsLoading(true)
         if (authResult.code) {
-          const result = await googleAuth(authResult.code)
+          // 1. Exchange code for user info (call your backend or Google API)
+          // For this example, let's assume you get the email from Google directly
+          // If you need to call your backend, do so here and get the email
 
-          if (result.requiresOTP) {
-            setTempUserData(result.user)
-            setOtpEmail(result.user.email)
-            setShowOtpInput(true)
-            toast.success("OTP sent to your email!")
-          } else {
-            setAuthUser(result.user)
-            toast.success(`Welcome, ${result.user.fullname}!`)
-            onClose()
-            navigate("/")
+          // For demonstration, let's say you get the email as:
+          // const email = resultFromGoogle.email;
+
+          // But if you need to call your backend to get the email, do it here:
+          // const result = await googleAuth(authResult.code);
+          // const email = result.email;
+
+          // For now, let's assume you have the email:
+          const result = await googleAuth(authResult.code);
+          const email = result.email || result.user?.email;
+          if (!email) {
+            toast.error("Could not get email from Google login.");
+            return;
           }
+
+          // 2. Send OTP to the email
+          const otpRes = await fetch("http://localhost:4000/user/send-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ email }),
+          });
+          const otpData = await otpRes.json();
+          if (!otpRes.ok) {
+            throw new Error(otpData.message || "Failed to send OTP");
+          }
+
+          setTempUserData(result.user || result); // Store user info for after OTP
+          setOtpEmail(email);
+          setShowOtpInput(true);
+          toast.success("OTP sent to your email!");
         }
       } catch (error) {
-        console.error("Google auth error:", error)
-        toast.error("Google authentication failed: " + error.message)
+        console.error("Google auth error:", error);
+        toast.error("Google authentication failed: " + error.message);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
     },
     [setAuthUser, onClose, navigate],

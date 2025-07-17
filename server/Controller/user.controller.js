@@ -5,6 +5,7 @@ import oauth2Client from "../utils/googleConfig.js"
 import axios from "axios"
 import { asyncHandler } from "../utils/asyncHandler.js"
 import { uploadMultipleFiles } from "../utils/cloudinary.js"
+import nodemailer from "nodemailer"
 
 const salt = bcrypt.genSaltSync(10)
 const secret = "jn4k5n6n5nnn6oi4n"
@@ -227,4 +228,194 @@ const googleLogin = async (req, res) => {
   }
 }
 
-export { signup, login, googleLogin, logoutUser }
+// In-memory OTP storage (in production, use Redis or database)
+const otpStorage = new Map()
+
+// Email transporter configuration
+const createEmailTransporter = () => {
+  return nodemailer.createTransport({
+    service: "gmail", // or your email service
+    auth: {
+      user: process.env.EMAIL_USER, // Your email
+      pass: process.env.EMAIL_PASS, // Your app password
+    },
+  })
+}
+
+// Generate 6-digit OTP
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+// Send OTP via email
+const sendOTP = async (req, res) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" })
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    // Generate OTP
+    const otp = generateOTP()
+    const expiresAt = Date.now() + 10 * 60 * 1000 // 10 minutes
+
+    // Store OTP with expiration
+    otpStorage.set(email, {
+      otp,
+      expiresAt,
+      attempts: 0,
+    })
+
+    // Create email transporter
+    const transporter = createEmailTransporter()
+
+    // Email content
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your OTP Code - MyApp",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333; text-align: center;">Your OTP Code</h2>
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center;">
+            <h1 style="color: #007bff; font-size: 32px; margin: 0; letter-spacing: 5px;">${otp}</h1>
+          </div>
+          <p style="color: #666; text-align: center; margin-top: 20px;">
+            This OTP will expire in 10 minutes. Do not share this code with anyone.
+          </p>
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            If you didn't request this code, please ignore this email.
+          </p>
+        </div>
+      `,
+    }
+
+    // Send email
+    await transporter.sendMail(mailOptions)
+
+    console.log(`OTP sent to ${email}: ${otp}`) // Remove in production
+
+    res.status(200).json({
+      message: "OTP sent successfully",
+      email,
+    })
+  } catch (error) {
+    console.error("Error sending OTP:", error)
+    res.status(500).json({ message: "Failed to send OTP" })
+  }
+}
+
+// Verify OTP
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP are required" })
+    }
+
+    // Get stored OTP data
+    const storedOTPData = otpStorage.get(email)
+
+    if (!storedOTPData) {
+      return res.status(400).json({ message: "OTP not found or expired" })
+    }
+
+    // Check if OTP is expired
+    if (Date.now() > storedOTPData.expiresAt) {
+      otpStorage.delete(email)
+      return res.status(400).json({ message: "OTP has expired" })
+    }
+
+    // Check attempts (max 3 attempts)
+    if (storedOTPData.attempts >= 3) {
+      otpStorage.delete(email)
+      return res.status(400).json({ message: "Too many failed attempts. Please request a new OTP." })
+    }
+
+    // Verify OTP
+    if (storedOTPData.otp !== otp.toString()) {
+      storedOTPData.attempts += 1
+      otpStorage.set(email, storedOTPData)
+      return res.status(400).json({
+        message: "Invalid OTP",
+        attemptsLeft: 3 - storedOTPData.attempts,
+      })
+    }
+
+    // OTP is valid - remove from storage
+    otpStorage.delete(email)
+
+    // Get user data
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ _id: user._id }, secret, { expiresIn: "24h" })
+
+    // Set token as HTTP-only cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    })
+
+    res.status(200).json({
+      message: "OTP verified successfully",
+      user: {
+        _id: user._id,
+        fullname: user.fullname,
+        email: user.email,
+        role: user.role,
+        location: user.location,
+        profilePic: user.profilePic,
+      },
+      token,
+    })
+  } catch (error) {
+    console.error("Error verifying OTP:", error)
+    res.status(500).json({ message: "Failed to verify OTP" })
+  }
+}
+
+// Resend OTP
+const resendOTP = async (req, res) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" })
+    }
+
+    // Check if there's an existing OTP request
+    const existingOTP = otpStorage.get(email)
+    if (existingOTP && Date.now() < existingOTP.expiresAt) {
+      // Check if it's been at least 1 minute since last OTP
+      const timeSinceLastOTP = Date.now() - (existingOTP.expiresAt - 10 * 60 * 1000)
+      if (timeSinceLastOTP < 60 * 1000) {
+        return res.status(429).json({
+          message: "Please wait before requesting a new OTP",
+          waitTime: Math.ceil((60 * 1000 - timeSinceLastOTP) / 1000),
+        })
+      }
+    }
+
+    // Use the same sendOTP logic
+    await sendOTP(req, res)
+  } catch (error) {
+    console.error("Error resending OTP:", error)
+    res.status(500).json({ message: "Failed to resend OTP" })
+  }
+}
+
+export { signup, login, googleLogin, logoutUser, sendOTP, verifyOTP, resendOTP }
