@@ -78,24 +78,6 @@ const signup = async (req, res) => {
   }
 }
 
-const header = asyncHandler(async (req, res) => {
-  console.log("req cookie  ", req.cookies)
-
-  const { token } = req.cookies
-
-  if (!token) {
-    return res.status(401).json({ message: "No token provided" })
-  }
-
-  jwt.verify(token, secret, {}, (err, info) => {
-    if (err) {
-      return res.status(401).json({ message: "Invalid token" })
-    }
-    return res.json(info)
-  })
-})
-
-// login
 const login = async (req, res) => {
   try {
     console.log("Login attempt started")
@@ -177,9 +159,13 @@ const googleLogin = async (req, res) => {
       return res.status(400).json({ message: "Authorization code is required" })
     }
 
+    console.log("Google OAuth code received:", code)
+
     // Exchange code for tokens
     const { tokens } = await oauth2Client.getToken(code)
     oauth2Client.setCredentials(tokens)
+
+    console.log("Tokens received from Google")
 
     // Fetch user info from Google
     const userRes = await axios.get(
@@ -187,9 +173,12 @@ const googleLogin = async (req, res) => {
     )
     const { email, name, picture } = userRes.data
 
+    console.log("Google user info:", { email, name })
+
     // Check if user exists; if not, create one
     let user = await User.findOne({ email })
     if (!user) {
+      console.log("Creating new user from Google OAuth")
       user = await User.create({
         fullname: name,
         email,
@@ -198,6 +187,13 @@ const googleLogin = async (req, res) => {
         password: "google_oauth", // Placeholder password for OAuth users
         profilePic: picture,
       })
+    } else {
+      console.log("Existing user found:", user.fullname)
+      // Update profile picture if it's from Google and user doesn't have one
+      if (picture && !user.profilePic) {
+        user.profilePic = picture
+        await user.save()
+      }
     }
 
     // Generate JWT Token
@@ -231,4 +227,4 @@ const googleLogin = async (req, res) => {
   }
 }
 
-export { signup, login, header, logoutUser, googleLogin }
+export { signup, login, googleLogin, logoutUser }

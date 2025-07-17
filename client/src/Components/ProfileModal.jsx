@@ -6,7 +6,7 @@ import toast from "react-hot-toast"
 import { useNavigate } from "react-router-dom"
 
 const ProfileModal = ({ isOpen, onClose }) => {
-  const [authUser, setAuthUser] = useContext(AuthContext)
+  const {authUser, setAuthUser} = useContext(AuthContext)
   const navigate = useNavigate()
 
   const handleLogout = async () => {
@@ -121,4 +121,4 @@ const ProfileModal = ({ isOpen, onClose }) => {
   )
 }
 
-export default ProfileModal
+export default ProfileModal;

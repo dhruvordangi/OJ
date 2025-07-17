@@ -1,16 +1,17 @@
 "use client"
-import { useState, useEffect, useContext, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { X, Eye, EyeOff, Mail, Lock, User, MapPin, Upload } from "lucide-react"
 import { useForm } from "react-hook-form"
 import toast from "react-hot-toast"
 import { useNavigate } from "react-router-dom"
 import { useGoogleLogin } from "@react-oauth/google"
-import { AuthContext } from "../context/AuthProvider"
+import { useAuth } from "../context/AuthProvider"
 import { googleAuth } from "../api"
 
 const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin }) => {
   const navigate = useNavigate()
-  const [authUser, setAuthUser] = useContext(AuthContext)
+  const { setAuthUser } = useAuth() // ONLY what we need
+
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [profilePreview, setProfilePreview] = useState(null)
@@ -29,6 +30,7 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
 
   const profilePicFile = watch("profilePic")
 
+  // Lock scroll when modal open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden"
@@ -41,13 +43,12 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
       setOtpEmail("")
       setTempUserData(null)
     }
-
     return () => {
       document.body.style.overflow = "unset"
     }
   }, [isOpen, reset])
 
-  // Handle profile picture preview
+  // Profile picture preview
   useEffect(() => {
     if (profilePicFile && profilePicFile.length > 0) {
       const file = profilePicFile[0]
@@ -61,8 +62,8 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
     }
   }, [profilePicFile])
 
-  // Handle user login
-  const handleUserLogin = async (url, credentials, userType) => {
+  // Shared login logic
+  const handleUserLogin = async (url, credentials, userTypeLabel) => {
     try {
       setIsLoading(true)
       const res = await fetch(url, {
@@ -74,31 +75,25 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
       const responseData = await res.json()
 
       if (!res.ok) {
-        throw new Error(responseData.message || `${userType} login failed`)
+        throw new Error(responseData.message || `${userTypeLabel} login failed`)
       }
 
-      toast.success(`${userType} Logged in Successfully`)
-      const userData = userType === "Admin" ? responseData.admin : responseData.user
+      const userData = userTypeLabel === "Admin" ? responseData.admin : responseData.user
+      if (!userData) throw new Error("Server did not return user data.")
+
       setAuthUser(userData)
-
-      // Store under different keys
-      if (userType === "Admin") {
-        localStorage.setItem("Admin", JSON.stringify(userData))
-      } else {
-        localStorage.setItem("User", JSON.stringify(userData))
-      }
-
+      toast.success(`${userTypeLabel} logged in successfully!`)
       onClose()
       navigate("/")
     } catch (error) {
-      console.error(`${userType} login error:`, error)
+      console.error(`${userTypeLabel} login error:`, error)
       toast.error("Error: " + error.message)
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Handle signup
+  // Signup
   const handleSignup = async (data, isAdmin = false) => {
     try {
       setIsLoading(true)
@@ -109,7 +104,6 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
       formData.append("email", data.email)
       formData.append("password", data.password)
       formData.append("location", data.location)
-
       if (data.profilePic && data.profilePic.length > 0) {
         formData.append("profilePic", data.profilePic[0])
       }
@@ -119,92 +113,94 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
         body: formData,
         credentials: "include",
       })
-
       const result = await response.json()
 
-      if (response.ok) {
-        toast.success(isAdmin ? "Admin Signup Successful" : "User Signup Successful")
-        const userData = isAdmin ? result.admin : result.user
-
-        localStorage.setItem("Users", JSON.stringify(userData))
-        setAuthUser(userData)
-        onClose()
-        navigate("/")
-      } else {
+      if (!response.ok) {
         toast.error(`Error: ${result.message}`)
+        return
       }
+
+      const userData = isAdmin ? result.admin : result.user
+      if (!userData) {
+        toast.error("Signup succeeded but user data missing.")
+        return
+      }
+
+      setAuthUser(userData)
+      toast.success(isAdmin ? "Admin signup successful" : "User signup successful")
+      onClose()
+      navigate("/")
     } catch (error) {
-      toast.error("Something went wrong!")
       console.error("Signup Error:", error)
+      toast.error("Something went wrong!")
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Google login with OTP
-  const responseGoogle = useCallback(async (authResult) => {
-    try {
-      setIsLoading(true)
-      if (authResult.code) {
-        const result = await googleAuth(authResult.code)
-        const { fullname, email } = result.user
+  // Google login
+  const responseGoogle = useCallback(
+    async (authResult) => {
+      try {
+        setIsLoading(true)
+        if (authResult.code) {
+          const result = await googleAuth(authResult.code)
 
-        // Store temporary user data
-        setTempUserData(result.user)
-
-        // Send OTP after Google auth
-        const otpRes = await fetch("http://localhost:4000/send-otp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        })
-
-        const otpData = await otpRes.json()
-
-        if (!otpRes.ok) {
-          throw new Error(otpData.message || "Failed to send OTP")
+          if (result.requiresOTP) {
+            setTempUserData(result.user)
+            setOtpEmail(result.user.email)
+            setShowOtpInput(true)
+            toast.success("OTP sent to your email!")
+          } else {
+            setAuthUser(result.user)
+            toast.success(`Welcome, ${result.user.fullname}!`)
+            onClose()
+            navigate("/")
+          }
         }
-
-        setOtpEmail(email)
-        setShowOtpInput(true)
-        toast.success("OTP sent to your email!")
+      } catch (error) {
+        console.error("Google auth error:", error)
+        toast.error("Google authentication failed: " + error.message)
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error) {
-      console.error("Google auth failed:", error)
-      toast.error("Google authentication failed!")
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+    },
+    [setAuthUser, onClose, navigate],
+  )
 
-  // OTP verification handler
+  const googleLogin = useGoogleLogin({
+    flow: "auth-code",
+    onSuccess: responseGoogle,
+    onError: (error) => {
+      console.error("Google login error:", error)
+      toast.error("Google login failed")
+    },
+  })
+
+  // OTP verify
   const handleOtpVerify = async () => {
     if (!otp.trim()) {
       toast.error("Please enter OTP")
       return
     }
-
     try {
       setIsLoading(true)
-      const res = await fetch("http://localhost:4000/verify-otp", {
+      const res = await fetch("http://localhost:4000/user/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email: otpEmail, otp }),
       })
-
       const data = await res.json()
 
       if (!res.ok) {
         throw new Error(data.message || "OTP verification failed")
       }
 
-      // Use the stored temporary user data
       if (tempUserData) {
         setAuthUser(tempUserData)
-        localStorage.setItem("User", JSON.stringify(tempUserData))
         toast.success(`Welcome, ${tempUserData.fullname}!`)
       }
-
       setShowOtpInput(false)
       onClose()
       navigate("/")
@@ -219,18 +215,14 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
   const handleResendOtp = async () => {
     try {
       setIsLoading(true)
-      const res = await fetch("http://localhost:4000/send-otp", {
+      const res = await fetch("http://localhost:4000/user/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email: otpEmail }),
       })
-
       const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to resend OTP")
-      }
-
+      if (!res.ok) throw new Error(data.message || "Failed to resend OTP")
       toast.success("OTP resent successfully!")
     } catch (error) {
       toast.error(error.message)
@@ -239,37 +231,19 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
     }
   }
 
-  const googleLogin = useGoogleLogin({
-    flow: "auth-code",
-    onSuccess: responseGoogle,
-    onError: () => toast.error("Google login failed"),
-  })
-
-  // Form submissions
-  const onLoginSubmit = (data) => {
-    handleUserLogin("http://localhost:4000/user/login", data, "User")
-  }
-
-  const onAdminLoginSubmit = (data) => {
-    handleUserLogin("http://localhost:4000/user/admin/login", data, "Admin")
-  }
-
-  const onSignupSubmit = (data) => {
-    handleSignup(data, false)
-  }
-
-  const onAdminSignupSubmit = (data) => {
-    handleSignup(data, true)
-  }
+  // Submit handlers
+  const onLoginSubmit = (data) => handleUserLogin("http://localhost:4000/user/login", data, "User")
+  const onAdminLoginSubmit = (data) => handleUserLogin("http://localhost:4000/admin/login", data, "Admin")
+  const onSignupSubmit = (data) => handleSignup(data, false)
+  const onAdminSignupSubmit = (data) => handleSignup(data, true)
 
   if (!isOpen) return null
 
-  // OTP Input Modal
+  // OTP Modal
   if (showOtpInput) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-          {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Verify OTP</h2>
@@ -283,7 +257,6 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
             </button>
           </div>
 
-          {/* OTP Form */}
           <div className="p-6">
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Enter OTP</label>
@@ -334,6 +307,7 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
     )
   }
 
+  // Main Auth Modal
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -355,10 +329,11 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
           {type === "login" ? (
             // LOGIN FORM
             <form onSubmit={handleSubmit(onLoginSubmit)} className="space-y-4">
+              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="email"
                     placeholder="Enter your Email"
@@ -371,10 +346,11 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                 {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
               </div>
 
+              {/* Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your Password"
@@ -386,7 +362,7 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -402,7 +378,7 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                 >
                   {isLoading ? (
                     <div className="flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                       Signing In...
                     </div>
                   ) : (
@@ -450,13 +426,14 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
           ) : (
             // SIGNUP FORM
             <form onSubmit={handleSubmit(onSignupSubmit)} className="space-y-4">
+              {/* Fullname */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="text"
-                    placeholder="Enter your FullName"
+                    placeholder="Enter your Full Name"
                     className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
                       errors.fullname ? "border-red-500" : "border-gray-300"
                     }`}
@@ -466,10 +443,11 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                 {errors.fullname && <p className="text-red-500 text-xs mt-1">{errors.fullname.message}</p>}
               </div>
 
+              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="email"
                     placeholder="Enter your Email"
@@ -482,10 +460,11 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                 {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
               </div>
 
+              {/* Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your Password"
@@ -497,7 +476,7 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -505,10 +484,11 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                 {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
               </div>
 
+              {/* Location */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="text"
                     placeholder="Enter your Location"
@@ -521,12 +501,13 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                 {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location.message}</p>}
               </div>
 
+              {/* Profile Pic */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Profile Picture (Optional)</label>
                 <div className="flex items-center space-x-4">
                   <div className="flex-1">
                     <div className="relative">
-                      <Upload className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Upload className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                       <input
                         type="file"
                         accept=".jpg,.jpeg,.png"
@@ -535,8 +516,8 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                           validate: (fileList) => {
                             if (!fileList || fileList.length === 0) return true
                             const file = fileList[0]
-                            const allowedExtensions = ["image/jpeg", "image/png", "image/jpg"]
-                            return allowedExtensions.includes(file.type)
+                            const allowed = ["image/jpeg", "image/png", "image/jpg"]
+                            return allowed.includes(file.type)
                               ? true
                               : "Invalid file type! Only .png, .jpg, and .jpeg files are accepted."
                           },
@@ -565,7 +546,7 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchToSignup, onSwitchToLogin })
                 >
                   {isLoading ? (
                     <div className="flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                       Creating Account...
                     </div>
                   ) : (

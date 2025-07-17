@@ -4,12 +4,10 @@ dotenv.config({ path: './.env'});
 import express from "express";
 import mongoose from "mongoose";
 import userRoute from "./route/user.router.js";
-import fileRoute from "./route/file.router.js"; // ✅ Ensure this file is correctly imported
-import otpRouter from "./route/otp.router.js"; // Importing the otpRouter
-
 // import authRoute from "./route/auth.route.js"; // ✅ Ensure this file contains the googleLogin route
 import cors from "cors";
 import cookieParser from "cookie-parser";
+
 // Initialize Express
 const app = express();
 
@@ -45,11 +43,12 @@ try {
 }
 
 
+
 // Routes
 
 app.use("/user/", userRoute);
-app.use("/user/", fileRoute); // ✅ Ensure fileRoute is defined and imported correctly
-app.use("/", otpRouter); // Using the otpRouter
+
+
 // app.all('*', (req, res, next) => {
 //     next(new AppError(`Can't find ${req.originalUrl} on the server`, 404));
 // });

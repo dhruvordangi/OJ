@@ -1,29 +1,48 @@
 "use client"
-import { useState, useContext } from "react"
-import { Link, useLocation } from "react-router-dom"
-import { Menu, X, Home, User, Settings, Bell } from "lucide-react"
+import { useState } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Menu, X, Home, User, Settings, Bell, LogOut } from "lucide-react"
 import AuthModal from "./AuthModal"
-import ProfileModal from "./ProfileModal"
-import { AuthContext } from "../context/AuthProvider"
+import ProfileModal from "./ProfileModal.jsx"
+import { useAuth } from "../context/AuthProvider"
+import toast from "react-hot-toast"
 
 const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
   const location = useLocation()
+  const navigate = useNavigate()
+
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [authUser] = useContext(AuthContext)
+
+  const { authUser, logout, isAuthenticated, isAdmin } = useAuth() // booleans
 
   const navItems = [
     { name: "Home", path: "/", icon: Home },
     { name: "About", path: "/about", icon: User },
   ]
 
+  const handleLogout = async () => {
+    try {
+      const result = await logout()
+      if (result.success) {
+        toast.success(result.message)
+        navigate("/")
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      console.error("Logout error:", error)
+      toast.error("Error during logout")
+    }
+  }
+
   return (
     <>
       <nav className="bg-white shadow-lg border-b border-gray-200 fixed w-full top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Left side */}
+            {/* Left */}
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -40,7 +59,7 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
               </Link>
             </div>
 
-            {/* Center - Navigation Links (hidden on mobile) */}
+            {/* Center nav */}
             <div className="hidden md:flex items-center space-x-8">
               {navItems.map((item) => {
                 const Icon = item.icon
@@ -61,10 +80,16 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
               })}
             </div>
 
-            {/* Right side */}
+            {/* Right */}
             <div className="flex items-center space-x-4">
-              {authUser ? (
+              {isAuthenticated ? (
                 <>
+                  {isAdmin && (
+                    <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">
+                      Admin
+                    </span>
+                  )}
+
                   <button className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors duration-200 relative">
                     <Bell className="w-5 h-5" />
                     <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
@@ -75,10 +100,18 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
                   </button>
 
                   <button
+                    onClick={handleLogout}
+                    className="p-2 rounded-md text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors duration-200"
+                    title="Logout"
+                  >
+                    <LogOut className="w-5 h-5" />
+                  </button>
+
+                  <button
                     onClick={() => setShowProfileModal(true)}
                     className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center cursor-pointer hover:shadow-lg transition-all duration-200"
                   >
-                    {authUser.profilePic ? (
+                    {authUser?.profilePic ? (
                       <img
                         src={authUser.profilePic || "/placeholder.svg"}
                         alt="Profile"
