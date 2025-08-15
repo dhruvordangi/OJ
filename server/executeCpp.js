@@ -1,7 +1,7 @@
-const { exec } = require("child_process");
-const path = require("path");
+import { exec } from "child_process";
+import path from "path";
 
-module.exports = (filePath, input = "") => {
+export default (filePath, input = "") => {
   const outputPath = filePath.replace(/\.cpp$/, "");
   return new Promise((resolve, reject) => {
     // Compile

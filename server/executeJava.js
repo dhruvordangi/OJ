@@ -1,7 +1,7 @@
-const { exec } = require("child_process");
-const path = require("path");
+import { exec } from "child_process";
+import path from "path";
 
-module.exports = (filePath, input = "") => {
+export default (filePath, input = "") => {
   const dir = path.dirname(filePath);
   const fileName = path.basename(filePath);
   const className = fileName.replace(/\.java$/, "");

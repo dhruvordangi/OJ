@@ -1,180 +1,184 @@
 import React, { useState, useMemo } from "react";
-import Editor from "react-simple-code-editor";
-import { highlight, languages } from "prismjs/components/prism-core";
-import "prismjs/components/prism-clike";
-import "prismjs/components/prism-javascript"; // fallback grammar; prism-c-like covers C/CPP-ish
-import "prismjs/themes/prism.css";
+import { useParams } from "react-router-dom";
+import EnhancedCodeEditor from "./EnhancedCodeEditor.jsx";
 
-/*
-  ------------------------------------------------------------------
-  Compiler.jsx  —  ultra‑simple online compiler client component
-  ------------------------------------------------------------------
-  ✅ Minimal props‑free version; reads backend URL from Vite env.
-  ✅ Language selector (C++, C, Python, Java) — value sent to backend.
-  ✅ Uses "fetch" per your preference (no axios).
-  ✅ Shows loading, output, and error areas cleanly.
-  ✅ Keeps styling light; works with Tailwind if available, but safe fallback.
-  ✅ Small default starter programs per language.
-
-  HOW IT WORKS
-  ------------
-  1. User selects a language.
-  2. User edits code in the inline editor.
-  3. Click **Run** → POST { language, code } to backend.
-  4. Backend returns JSON: { output: string, error?: string } (contract flexible).
-  5. We display output / error.
-
-  Customize the payload shape here if your server differs.
-*/
-// const VITE_BACKEND_URL = "http://localhost:5000/api/run";
-// --- helper: default starter code per language ---
+// Default code snippets for each language
 const DEFAULT_SNIPPETS = {
-  cpp: `#include <bits/stdc++.h>\n using namespace std;\n int main(){\n cout << \"Hello from C++!\\n\";\n return 0;\n }`,
-  c: `#include <stdio.h>\n int main(){\n printf(\"Hello from C!\\n\");\n return 0;\n }`,
-  python: `print("Hello from Python!")`,
-  java: `import java.util.*;\n class Main{\n public static void main(String[] args){\n System.out.println("Hello from Java!");\n }\n }`,
+  cpp: `#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+    cout << "Hello from C++!" << endl;
+    return 0;
+}`,
+  c: `#include <stdio.h>
+
+int main() {
+    printf("Hello from C!\\n");
+    return 0;
+}`,
+  python: `print("Hello from Python!")
+
+# Your code here`,
+  java: `import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from Java!");
+    }
+}`,
 };
 
-// map our short codes to Prism grammar for syntax highlighting
-const PRISM_LANG_MAP = {
-  cpp: languages.js,   // prism-clike gives decent fallback; full cpp grammar optional
-  c: languages.js,     // same fallback
-  python: languages.js,    // load python if you like; using js fallback keeps bundle tiny
-  java: languages.js,
-};
-
-// Derive backend URL (fail‑safe empty string → will error visibly on Run)
-// const BACKEND_URL = import.meta?.env?.VITE_BACKEND_URL ?? "";
-const BACKEND_URL = "http://localhost:5000/run";
-
-
-export default function Compiler() {
+export default function Compiler({ problemId: propProblemId }) {
+  const params = useParams();
+  const problemId = propProblemId || params.id;
   const [language, setLanguage] = useState("cpp");
   const [code, setCode] = useState(DEFAULT_SNIPPETS.cpp);
   const [output, setOutput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isRunning, setIsRunning] = useState(false);
-  const [input, setInput] = useState(""); // <-- new state
+  const [verdict, setVerdict] = useState("");
+  const [editorTheme, setEditorTheme] = useState("vs-dark");
 
-  // update starter code when language changes (only if user hasn't typed yet?)
-  // simple version: always swap snippet when language changes
+  // Update starter code when language changes
   const handleLanguageChange = (e) => {
     const lang = e.target.value;
     setLanguage(lang);
     setCode(DEFAULT_SNIPPETS[lang] ?? "");
     setOutput("");
     setErrorMsg("");
+    setVerdict("");
   };
 
-  const doRun = async () => {
-    if (!BACKEND_URL) {
-      setErrorMsg("Backend URL missing. Define VITE_BACKEND_URL in your env.");
-      return;
-    }
+  const handleSubmit = async () => {
     setIsRunning(true);
     setErrorMsg("");
     setOutput("");
-
+    setVerdict("");
     try {
-      const resp = await fetch(BACKEND_URL, {
+      const resp = await fetch("http://localhost:4000/api/problems/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language, code, input }), // <-- send input
+        credentials: "include",
+        body: JSON.stringify({ problemId, code, language }),
       });
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Server ${resp.status}: ${text}`);
-      }
-
-      // expected payload: { output: string, error?: string }
       const data = await resp.json();
-      if (data.error) setErrorMsg(String(data.error));
-      if (data.output) setOutput(String(data.output));
-      if (!data.error && !data.output) setOutput("(no output)");
+      if (!resp.ok) throw new Error(data.error || "Submission failed");
+      setVerdict(data.verdict);
     } catch (err) {
-      setErrorMsg(err?.message || "Request failed");
+      setErrorMsg(err.message);
     } finally {
       setIsRunning(false);
     }
   };
 
-  // highlight fn memoized by lang
-  const highlightFn = useMemo(() => {
-    const prismLang = PRISM_LANG_MAP[language] ?? languages.js;
-    return (src) => highlight(src, prismLang);
-  }, [language]);
-
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 flex flex-col items-stretch gap-4">
-      <h1 className="text-2xl font-bold text-center">AlgoU Online Code Compiler</h1>
+    <div className="w-full max-w-6xl mx-auto p-4 flex flex-col items-stretch gap-4">
+      <div className="text-center">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          AlgoU Enhanced Code Editor
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Professional coding experience with auto-completion, IntelliSense, and multiple themes
+        </p>
+      </div>
 
-      <div className="flex items-center gap-2 justify-center flex-wrap">
-        <label htmlFor="lang" className="text-sm font-medium">Language:</label>
+      {/* Language Selector */}
+      <div className="flex items-center gap-4 justify-center flex-wrap bg-white p-4 rounded-lg shadow-sm">
+        <label htmlFor="lang" className="text-sm font-medium text-gray-700">
+          Programming Language:
+        </label>
         <select
           id="lang"
           value={language}
           onChange={handleLanguageChange}
-          className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="border border-gray-300 rounded-md py-2 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
         >
           <option value="cpp">C++</option>
           <option value="c">C</option>
           <option value="python">Python</option>
           <option value="java">Java</option>
         </select>
-
-        <button
-          type="button"
-          onClick={doRun}
-          disabled={isRunning}
-          className="ml-4 inline-flex items-center gap-1 rounded-md bg-gradient-to-br from-pink-500 to-orange-400 text-white text-sm font-medium px-4 py-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {isRunning ? "Running..." : "Run"}
-        </button>
+        
+        <div className="text-sm text-gray-500">
+          <span className="font-medium">Features:</span> Auto-completion • IntelliSense • Syntax Highlighting • Multiple Themes
+        </div>
       </div>
 
-      <div className="bg-gray-50 border border-gray-300 rounded-md shadow-inner w-full" style={{ minHeight: "300px", maxHeight: "400px", overflowY: "auto" }}>
-        <Editor
-          value={code}
-          onValueChange={setCode}
-          highlight={highlightFn}
-          padding={10}
-          style={{
-            fontFamily: '"Fira code", "Fira Mono", monospace',
-            fontSize: 12,
-            outline: "none",
-            border: "none",
-            backgroundColor: "transparent",
-            minHeight: "300px",
-          }}
+      {/* Enhanced Code Editor - FIXED HEIGHT CONTAINER */}
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden" style={{ height: '600px' }}>
+        <EnhancedCodeEditor
+          language={language}
+          code={code}
+          onCodeChange={setCode}
+          onSubmit={handleSubmit}
+          isRunning={isRunning}
+          theme={editorTheme}
+          onThemeChange={setEditorTheme}
+          problemId={problemId}
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium mb-1">Input (stdin):</label>
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          rows={3}
-          className="w-full border border-gray-300 rounded-md p-2 text-sm font-mono"
-          placeholder="Enter input for your program here..."
-        />
-      </div>
-
-      {(output || errorMsg) && (
-        <div className="w-full flex flex-col gap-2">
+      {/* Results Section */}
+      {(verdict || errorMsg) && (
+        <div className="w-full flex flex-col gap-3">
           {errorMsg && (
-            <div className="bg-red-50 border border-red-300 text-red-700 rounded-md p-3 text-xs whitespace-pre-wrap break-words">
-              {errorMsg}
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                <span className="font-medium">Compilation Error</span>
+              </div>
+              <pre className="whitespace-pre-wrap break-words font-mono text-xs">{errorMsg}</pre>
             </div>
           )}
-          {output && (
-            <div className="bg-gray-100 border border-gray-300 rounded-md p-3 text-xs font-mono whitespace-pre-wrap break-words">
-              {output}
+          
+          {verdict && (
+            <div className={`rounded-lg p-4 text-center font-medium ${
+              verdict === 'Success' 
+                ? 'bg-green-50 border border-green-200 text-green-700' 
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}>
+              <div className="flex items-center justify-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  verdict === 'Success' ? 'bg-green-500' : 'bg-red-500'
+                }`}></div>
+                <span className="text-lg">
+                  {verdict === 'Success' ? '✅ Accepted' : '❌ Failed'}
+                </span>
+              </div>
+              <p className="text-sm mt-1 opacity-75">
+                {verdict === 'Success' 
+                  ? 'Your solution passed all test cases!' 
+                  : 'Your solution failed some test cases. Please check your logic.'
+                }
+              </p>
             </div>
           )}
         </div>
       )}
+
+      {/* Features Info */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-900 mb-2">✨ Enhanced Features</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-blue-800">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+            <span>Auto-completion</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+            <span>IntelliSense</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+            <span>Multiple Themes</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+            <span>Code Snippets</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

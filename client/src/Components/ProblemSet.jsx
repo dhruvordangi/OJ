@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const API_URL = "http://localhost:4000/api/problems";
 const FILE_URL = "http://localhost:4000/uploads/";
@@ -13,6 +14,7 @@ const DIFFICULTY_COLORS = {
 export default function ProblemSet() {
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     axios.get(API_URL)
@@ -29,7 +31,7 @@ export default function ProblemSet() {
       ) : (
         <div className="space-y-4">
           {problems.map(problem => (
-            <div key={problem._id} className="border rounded-lg p-4 shadow-sm bg-white">
+            <div key={problem._id} className="border rounded-lg p-4 shadow-sm bg-white cursor-pointer hover:bg-gray-50" onClick={() => navigate(`/problems/${problem._id}/solve`)}>
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">{problem.title}</h3>
                 <span className={`font-bold ${DIFFICULTY_COLORS[problem.difficulty]}`}>

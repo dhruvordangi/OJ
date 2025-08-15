@@ -1,7 +1,11 @@
-const fs = require("fs");
-const path = require("path");
-const { v4: uuid } = require("uuid");
+import fs from "fs";
+import path from "path";
+import { v4 as uuid } from "uuid";
+import { fileURLToPath } from "url";
 
+// __dirname replacement in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const dirCodes = path.join(__dirname, "codes");
 
@@ -21,7 +25,7 @@ if (!fs.existsSync(dirCodes)) {
  * 4. A UUID (universally-unique identifier) is used to ensure file names never
  *    clash when several users hit the endpoint at the same time.
  *
- * The main export is `generateFile(extension, code)` which returns **the full
+ * The main export is `generateFile(language, code)` which returns **the full
  * path** of the freshly-created file so that the caller can pass it to the
  * next build / run step.
  */
@@ -36,12 +40,10 @@ const getExtension = (language) => {
   }
 };
 
-const generateFile = (language, code) => {
+export const generateFile = (language, code) => {
   const jobId = uuid();
   const filename = `${jobId}.${getExtension(language)}`;
   const filePath = path.join(dirCodes, filename);
   fs.writeFileSync(filePath, code);
   return filePath;
 };
-
-module.exports = { generateFile };

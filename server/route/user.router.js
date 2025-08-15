@@ -7,7 +7,9 @@ import {
   sendOTP,
   verifyOTP,
   resendOTP,
+  getProfile,
 } from "../Controller/user.controller.js";
+import { isAuthenticated } from '../middlewares/auth.middleware.js';
 
 const router = express.Router()
 
@@ -27,5 +29,6 @@ router.route("/logout").post(logoutUser)
 router.post("/send-otp", sendOTP)
 router.post("/verify-otp", verifyOTP)
 router.post("/resend-otp", resendOTP)
+router.get('/me', isAuthenticated, getProfile);
 
 export default router

@@ -1,6 +1,6 @@
 "use client"
 import { Link, useLocation } from "react-router-dom"
-import { Home, User, Settings, FileText, BarChart3, Calendar, Mail, X } from 'lucide-react'
+import { Home, User, Settings, FileText, BarChart3, Calendar, Mail, X ,Code} from 'lucide-react'
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   const location = useLocation()
@@ -8,10 +8,11 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   const sidebarItems = [
     { name: "Dashboard", path: "/", icon: Home },
     { name: "About", path: "/about", icon: User },
-    { name: "Analytics", path: "/analytics", icon: BarChart3 },
-    { name: "Documents", path: "/documents", icon: FileText },
+    { name: "Code Editor", path: "/test-editor", icon: Code },
+    { name: "ADD-PROBLEM", path: "/analytics", icon: BarChart3 },
+    { name: "ProblemSet", path: "/problems", icon: FileText },
     { name: "Calendar", path: "/calendar", icon: Calendar },
-    { name: "Messages", path: "/messages", icon: Mail },
+    { name: "Profile", path: "/profile", icon: Mail },
     { name: "Settings", path: "/settings", icon: Settings },
   ]
 

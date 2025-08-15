@@ -1,6 +1,8 @@
 import express from "express";
 import Problem from "../model/problem.model.js";
 import multerMiddleware from "../middlewares/multer.middleware.js";
+import { submitSolution } from '../Controller/problem.controller.js';
+import { isAuthenticated } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
@@ -43,5 +45,7 @@ router.post(
     }
   }
 );
+
+router.post('/submit', isAuthenticated, submitSolution);
 
 export default router;

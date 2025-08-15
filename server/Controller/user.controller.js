@@ -418,4 +418,17 @@ const resendOTP = async (req, res) => {
   }
 }
 
-export { signup, login, googleLogin, logoutUser, sendOTP, verifyOTP, resendOTP }
+const getProfile = async (req, res) => {
+  try {
+    // req.user is set by isAuthenticated middleware
+    const user = await User.findById(req.user._id)
+      .select('-password')
+      .populate('submissions.problem', 'title'); // Optionally populate problem title
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch profile', error: error.message });
+  }
+};
+
+export { signup, login, googleLogin, logoutUser, sendOTP, verifyOTP, resendOTP, getProfile }

@@ -1,6 +1,6 @@
-const { exec } = require("child_process");
+import { exec } from "child_process";
 
-module.exports = (filePath, input = "") => {
+export default (filePath, input = "") => {
   return new Promise((resolve, reject) => {
     const process = exec(`python "${filePath}"`, (error, stdout, stderr) => {
       if (error) return reject(stderr || error.message);
