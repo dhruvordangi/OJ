@@ -10,6 +10,25 @@ import nodemailer from "nodemailer"
 const salt = bcrypt.genSaltSync(10)
 const secret = "jn4k5n6n5nnn6oi4n"
 
+// OTP storage (in-memory for now - use Redis in production)
+const otpStorage = new Map()
+
+// Generate 6-digit OTP
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+// Create email transporter
+const createEmailTransporter = () => {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER || 'your-email@gmail.com',
+      pass: process.env.EMAIL_PASS || 'your-app-password'
+    }
+  })
+}
+
 const signup = async (req, res) => {
   try {
     const { fullname, email, password, location } = req.body
@@ -228,24 +247,7 @@ const googleLogin = async (req, res) => {
   }
 }
 
-// In-memory OTP storage (in production, use Redis or database)
-const otpStorage = new Map()
 
-// Email transporter configuration
-const createEmailTransporter = () => {
-  return nodemailer.createTransport({
-    service: "gmail", // or your email service
-    auth: {
-      user: process.env.EMAIL_USER, // Your email
-      pass: process.env.EMAIL_PASS, // Your app password
-    },
-  })
-}
-
-// Generate 6-digit OTP
-const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
 
 // Send OTP via email
 const sendOTP = async (req, res) => {

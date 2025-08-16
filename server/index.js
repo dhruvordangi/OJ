@@ -19,11 +19,13 @@ app.use(cookieParser())
 
 // ✅ Fix: Remove problematic headers that may block OAuth requests
 // ❌ Don't manually set `Cross-Origin-Opener-Policy` for OAuth
-app.use(cors({ origin: "http://localhost:5173", credentials: true })); 
-app.use(express.static("public"));
+app.use(cors({ 
+    origin: ["http://localhost", "http://localhost:80", "http://localhost:5173"], 
+    credentials: true 
+  })); app.use(express.static("public"));
 
 // MongoDB Connection
-const PORT = process.env.PORT || 4001;
+const PORT = process.env.PORT || 4000;
 const URI = process.env.MONGODBURI;
 
 
@@ -42,9 +44,6 @@ try {
 } catch (error) {
     console.log("Error connecting to the database:", error);
 }
-
-
-
 // Routes
 
 app.use("/user/", userRoute);
